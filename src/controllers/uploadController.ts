@@ -96,13 +96,35 @@ export const uploadImage = async (req: Request, res: Response): Promise<void> =>
     console.log(`   🔗 Generating permanent URL for image`);
 
     // Generate permanent URL (works if bucket has anonymous download policy)
-    const minioEndpoint = process.env.MINIO_ENDPOINT || '143.198.95.222';
-    const minioPort = process.env.MINIO_PORT || '9000';
-    const minioUseSSL = process.env.MINIO_USE_SSL === 'true';
-    const protocol = minioUseSSL ? 'https' : 'http';
+    // Use MINIO_PUBLIC_URL if set (for HTTPS/domain), otherwise use endpoint
+    const minioPublicUrl = process.env.MINIO_PUBLIC_URL;
+    let permanentUrl: string;
     
-    // Direct URL - permanent and works with anonymous download policy
-    const permanentUrl = `${protocol}://${minioEndpoint}:${minioPort}/${BUCKET_NAME}/${fileName}`;
+    if (minioPublicUrl) {
+      // Use public URL (supports HTTPS and domain name)
+      // Format: 
+      //   - https://images.cucumber-dashboard.win (subdomain)
+      //   - https://cucumber-dashboard.win/minio (path with /minio/)
+      const baseUrl = minioPublicUrl.endsWith('/') 
+        ? minioPublicUrl.slice(0, -1) 
+        : minioPublicUrl;
+      
+      // If URL contains /minio, it's a path-based proxy (nginx location /minio/)
+      // MinIO bucket path will be: /minio/bucket-name/filename
+      if (baseUrl.includes('/minio')) {
+        permanentUrl = `${baseUrl}/${BUCKET_NAME}/${fileName}`;
+      } else {
+        // Subdomain or direct access
+        permanentUrl = `${baseUrl}/${BUCKET_NAME}/${fileName}`;
+      }
+    } else {
+      // Fallback to endpoint (for local development)
+      const minioEndpoint = process.env.MINIO_ENDPOINT || '143.198.95.222';
+      const minioPort = process.env.MINIO_PORT || '9000';
+      const minioUseSSL = process.env.MINIO_USE_SSL === 'true';
+      const protocol = minioUseSSL ? 'https' : 'http';
+      permanentUrl = `${protocol}://${minioEndpoint}:${minioPort}/${BUCKET_NAME}/${fileName}`;
+    }
 
     console.log(`   ✅ Permanent URL: ${permanentUrl}`);
     console.log(`   ♾️  URL is permanent (never expires)`);
